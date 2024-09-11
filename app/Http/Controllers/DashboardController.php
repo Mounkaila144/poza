@@ -455,7 +455,7 @@ class DashboardController extends Controller
                 // "product_warehouse.warehouse_id",
                 // "products.stock_alert",
             )
-            ->take('5')->get();
+            ->take('30')->get();
 
         // echo $product_warehouse_data;
         // die();
