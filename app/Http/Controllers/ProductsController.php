@@ -1755,6 +1755,7 @@ class ProductsController extends BaseController
         $suppliers = Provider::where('deleted_at', '=', null)->get(['id', 'name']);
 
         return response()->json([
+            'warehouses' => $warehouses,
             'categories' => $categories,
             'brands' => $brands,
             'units' => $units,
