@@ -77,6 +77,14 @@
               <i class="i-Close-Window text-25 text-danger"></i>
             </a>
           </span>
+            <span v-else-if="props.column.field == 'code'">
+        {{ props.row.code }}
+              <a
+                  @click="copyToClipboard(props.row.code)" v-b-tooltip.hover title="copy" class="cursor-pointer">
+<i class="i-File-Copy  text-danger"></i>
+            </a>
+
+      </span>
           <span v-else-if="props.column.field == 'image'">
             <b-img thumbnail height="50" width="50" fluid :src="'/images/products/' + props.row.image"
               alt="image"></b-img>
@@ -569,7 +577,21 @@ export default {
       this.search = value.searchTerm;
       this.Get_Products(this.serverParams.page);
     },
-
+      copyToClipboard(text) {
+          navigator.clipboard.writeText(text).then(() => {
+              this.$bvToast.toast('Copied to clipboard', {
+                  title: 'Success',
+                  variant: 'success',
+                  solid: true
+              });
+          }).catch(err => {
+              this.$bvToast.toast('Failed to copy', {
+                  title: 'Error',
+                  variant: 'danger',
+                  solid: true
+              });
+          });
+      },
     //------ Reset Filter
     Reset_Filter() {
       this.search = "";

@@ -798,6 +798,8 @@ class ProductsController extends BaseController
                 // 'unit_id'     => Rule::requiredIf($request->type != 'is_service'),
                 'cost'        => Rule::requiredIf($request->type == 'is_single'),
                 'price'       => Rule::requiredIf($request->type != 'is_variant'),
+                'warehouse_id' => 'required|exists:warehouses,id',  // Validation du warehouse_id
+
             ];
 
 
@@ -988,7 +990,8 @@ class ProductsController extends BaseController
                     $manage_stock = 1;
 
                     //-- check if type is_variant
-                } elseif ($request['type'] == 'is_variant') {
+                }
+                elseif ($request['type'] == 'is_variant') {
 
                     $Product->price = 0;
                     $Product->cost  = 0;
@@ -1006,7 +1009,8 @@ class ProductsController extends BaseController
                     $manage_stock = 1;
 
                     //-- check if type is_service
-                } else {
+                }
+                else {
                     $Product->price = $request['price'];
                     $Product->cost  = 0;
 
@@ -1197,7 +1201,8 @@ class ProductsController extends BaseController
                         }
                     }
                     $filename = 'no-image.png';
-                } else {
+                }
+                else {
                     if ($Product->image !== null) {
                         foreach (explode(',', $Product->image) as $img) {
                             $pathIMG = public_path() . '/images/products/' . $img;
@@ -1245,6 +1250,23 @@ class ProductsController extends BaseController
                         $images[] = $name;
                     }
                     $filename = implode(",", $images);
+                }
+// Mettre à jour ou créer dans product_warehouse
+                $productWarehouse = product_warehouse::where('product_id', $Product->id)->first();
+
+                if ($productWarehouse) {
+                    // Si un enregistrement existe déjà, on met à jour l'entrepôt et la quantité
+                    $productWarehouse->update([
+                        'warehouse_id' => $request->warehouse_id,  // Mettre à jour le warehouse_id
+                        'qte' => $request->qte ?? $productWarehouse->qte,  // Si la quantité est fournie, mettez à jour
+                    ]);
+                } else {
+                    // Si aucune entrée n'existe, on en crée une nouvelle
+                    product_warehouse::create([
+                        'product_id' => $Product->id,
+                        'warehouse_id' => $request->warehouse_id,
+                        'qte' => $request->qte ?? 0,  // Quantité par défaut si non spécifiée
+                    ]);
                 }
 
                 $Product->image = $filename;
@@ -1789,7 +1811,14 @@ class ProductsController extends BaseController
         $this->authorizeForUser($request->user('api'), 'update', Product::class);
 
         $Product = Product::where('deleted_at', '=', null)->findOrFail($id);
-
+        //get warehouses assigned to user
+        $user_auth = auth()->user();
+        if($user_auth->is_all_warehouses){
+            $warehouses = Warehouse::where('deleted_at', '=', null)->get(['id', 'name']);
+        }else{
+            $warehouses_id = UserWarehouse::where('user_id', $user_auth->id)->pluck('warehouse_id')->toArray();
+            $warehouses = Warehouse::where('deleted_at', '=', null)->whereIn('id', $warehouses_id)->get(['id', 'name']);
+        }
         $item['id'] = $Product->id;
         $item['type'] = $Product->type;
         $item['code'] = $Product->code;
@@ -1878,7 +1907,14 @@ class ProductsController extends BaseController
         } else {
             $item['images'] = [];
         }
-
+        // Récupérer les entrepôts où se trouve le produit
+        $productWarehouses = $Product->warehouses()->get()->map(function ($warehouse) {
+            return [
+                'warehouse_id' => $warehouse->id,
+                'warehouse_name' => $warehouse->name,
+                'quantity' => $warehouse->pivot->qte, // Quantité dans cet entrepôt
+            ];
+        });
         if ($Product->type == 'is_variant') {
             $item['is_variant'] = true;
             $productsVariants = ProductVariant::where('product_id', $id)
@@ -1905,6 +1941,9 @@ class ProductsController extends BaseController
         $item['not_selling'] = $Product->not_selling?true:false;
         $item['show_alert'] = $Product->show_alert?true:false;
 
+        if (!empty($productWarehouses)) {
+            $item['warehouse_id'] = $productWarehouses[0]['warehouse_id']; // Utilisation correcte du premier entrepôt
+        }
         $data = $item;
         $categories = Category::where('deleted_at', null)->get(['id', 'name']);
         $brands = Brand::where('deleted_at', null)->get(['id', 'name']);
@@ -1926,6 +1965,7 @@ class ProductsController extends BaseController
 
         return response()->json([
             'product' => $data,
+            'warehouses' => $warehouses,
             'categories' => $categories,
             'brands' => $brands,
             'units' => $units,

@@ -28,6 +28,22 @@
                     </b-form-group>
                   </validation-provider>
                 </b-col>
+                  <!-- warehouse -->
+                  <b-col md="6" class="mb-3">
+                      <validation-provider name="warehouse" :rules="{ required: true}">
+                          <b-form-group slot-scope="{ valid, errors }" :label="$t('warehouse') + ' ' + '*'">
+                              <v-select
+                                  :class="{'is-invalid': !!errors.length}"
+                                  :state="errors[0] ? false : (valid ? true : null)"
+                                  v-model="product.warehouse_id"
+                                  :reduce="label => label.value"
+                                  :placeholder="$t('Choose_Warehouse')"
+                                  :options="warehouses.map(warehouses => ({label: warehouses.name, value: warehouses.id}))"
+                              />
+                              <b-form-invalid-feedback>{{ errors[0] }}</b-form-invalid-feedback>
+                          </b-form-group>
+                      </validation-provider>
+                  </b-col>
 
                 <!-- Barcode Symbology  -->
                 <b-col md="6" class="mb-2">
@@ -544,7 +560,8 @@ export default {
       Subcategories: [],
       units: [],
       units_sub: [],
-      brands: [],
+        warehouses: [],
+        brands: [],
       suppliers:[],
       roles: {},
       variants: [],
@@ -553,7 +570,8 @@ export default {
         name: "",
         code: "",
         Type_barcode: "",
-        cost: "",
+          warehouse_id: "",
+          cost: "",
         price: "",
         brand_id: "",
         category_id: "",
@@ -691,6 +709,7 @@ export default {
           this.variants = response.data.product.ProductVariant;
           this.images = response.data.product.images;
           this.categories = response.data.categories;
+            this.warehouses = response.data.warehouses;
           this.brands = response.data.brands;
           this.suppliers = response.data.suppliers?? [];
           this.units = response.data.units;

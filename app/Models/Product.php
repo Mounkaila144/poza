@@ -30,7 +30,11 @@ class Product extends Model
         'price' => 'double',
         'TaxNet' => 'double',
     ];
-
+    public function warehouses()
+    {
+        return $this->belongsToMany(Warehouse::class, 'product_warehouse')
+            ->withPivot('qte', 'product_variant_id');
+    }
     public function ProductVariant()
     {
         return $this->belongsTo('App\Models\ProductVariant');
