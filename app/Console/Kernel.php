@@ -28,11 +28,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // Déconnecter les utilisateurs à 13h00 et 00h00
-        $schedule->call(function () {
-            // Exécuter une action pour déconnecter tous les utilisateurs
-            Auth::logout();  // Option simple, à personnaliser si nécessaire
-        })->twiceDaily(0, 13);
+        $schedule->command('logout:all')->dailyAt('13:00');
+        $schedule->command('logout:all')->dailyAt('00:00');
         $schedule->command('database:backup');
 
     }
