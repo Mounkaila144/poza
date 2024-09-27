@@ -1696,59 +1696,80 @@ class ProductsController extends BaseController
 
     //--------------  Product Quantity Alerts ---------------\\
 
-    public function Products_Alert(request $request)
+    public function Products_Alert(Request $request)
     {
+        // Autorisation de l'utilisateur pour vérifier les alertes de stock
         $this->authorizeForUser($request->user('api'), 'Stock_Alerts', Product::class);
 
+        // Récupération des données des produits dans les entrepôts avec leurs variantes
         $product_warehouse_data = product_warehouse::with('warehouse', 'product', 'productVariant')
             ->join('products', 'product_warehouse.product_id', '=', 'products.id')
             ->where('manage_stock', true)
-            ->whereRaw('qte <= stock_alert')
+            ->whereRaw('qte <= products.stock_alert')
             ->where('products.show_alert', true) // Vérification que show_alert est activé pour le produit
             ->where(function ($query) use ($request) {
                 return $query->when($request->filled('warehouse'), function ($query) use ($request) {
                     return $query->where('warehouse_id', $request->warehouse);
                 });
-            })->where('product_warehouse.deleted_at', null)->get();
+            })
+            ->whereNull('product_warehouse.deleted_at')
+            ->get();
 
         $data = [];
 
         if ($product_warehouse_data->isNotEmpty()) {
-
             foreach ($product_warehouse_data as $product_warehouse) {
-                if ($product_warehouse->qte <= $product_warehouse['product']->stock_alert) {
-                    if ($product_warehouse->product_variant_id !== null) {
-                        $item['code'] = $product_warehouse['productVariant']->code;
-                        $item['name'] = '[' . $product_warehouse['productVariant']->name . ']' . $product_warehouse['product']->name;
-                    } else {
-                        $item['code'] = $product_warehouse['product']->code;
-                        $item['name'] = $product_warehouse['product']->name;
+                // Calculer la quantité totale des achats en attente pour chaque produit
+                $purchase_warehouse_total_qty = PurchaseDetail::where('purchase_details.product_id', $product_warehouse->product->id)
+                    ->join('purchases', 'purchase_details.purchase_id', '=', 'purchases.id')
+                    ->where('purchases.statut', '!=', 'received')
+                    ->whereNull('purchases.deleted_at') // Vérifier que l'achat n'est pas supprimé
+                    ->sum('purchase_details.quantity'); // Somme des quantités en attente
+
+                // Ne pas ajouter le produit s'il a une quantité en attente supérieure à 0
+                if (($purchase_warehouse_total_qty ?? 0) == 0) {
+                    if ($product_warehouse->qte <= $product_warehouse->product->stock_alert) {
+                        $item = [];
+
+                        if ($product_warehouse->product_variant_id !== null) {
+                            $item['code'] = $product_warehouse->productVariant->code;
+                            $item['name'] = '[' . $product_warehouse->productVariant->name . ']' . $product_warehouse->product->name;
+                        } else {
+                            $item['code'] = $product_warehouse->product->code;
+                            $item['name'] = $product_warehouse->product->name;
+                        }
+
+                        $item['quantity'] = $product_warehouse->qte;
+                        $item['warehouse'] = $product_warehouse->warehouse->name;
+                        $item['stock_alert'] = $product_warehouse->product->stock_alert;
+                        $data[] = $item;
                     }
-                    $item['quantity'] = $product_warehouse->qte;
-                    $item['warehouse'] = $product_warehouse['warehouse']->name;
-                    $item['stock_alert'] = $product_warehouse['product']->stock_alert;
-                    $data[] = $item;
                 }
             }
         }
 
-        $perPage = $request->limit; // How many items do you want to display.
+        $perPage = $request->limit; // Nombre d'éléments à afficher par page
         $pageStart = \Request::get('page', 1);
-        // Start displaying items from this number;
         $offSet = ($pageStart * $perPage) - $perPage;
+
         $collection = collect($data);
-        // Get only the items you need using array_slice
         $data_collection = $collection->slice($offSet, $perPage)->values();
 
-        $products = new LengthAwarePaginator($data_collection, count($data), $perPage, Paginator::resolveCurrentPage(), array('path' => Paginator::resolveCurrentPath()));
+        $products = new LengthAwarePaginator(
+            $data_collection,
+            count($data),
+            $perPage,
+            Paginator::resolveCurrentPage(),
+            ['path' => Paginator::resolveCurrentPath()]
+        );
 
-        //get warehouses assigned to user
+        // Récupération des entrepôts assignés à l'utilisateur
         $user_auth = auth()->user();
         if ($user_auth->is_all_warehouses) {
-            $warehouses = Warehouse::where('deleted_at', '=', null)->get(['id', 'name']);
+            $warehouses = Warehouse::whereNull('deleted_at')->get(['id', 'name']);
         } else {
             $warehouses_id = UserWarehouse::where('user_id', $user_auth->id)->pluck('warehouse_id')->toArray();
-            $warehouses = Warehouse::where('deleted_at', '=', null)->whereIn('id', $warehouses_id)->get(['id', 'name']);
+            $warehouses = Warehouse::whereNull('deleted_at')->whereIn('id', $warehouses_id)->get(['id', 'name']);
         }
 
         return response()->json([
