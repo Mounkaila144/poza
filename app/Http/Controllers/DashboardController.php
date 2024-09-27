@@ -426,7 +426,7 @@ class DashboardController extends Controller
             ->addSelect('products.stock_alert')
             ->join('products', 'product_warehouse.product_id', '=', 'products.id')
             ->leftJoinSub(
-                // Subquery to calculate the sum of all purchase quantities for each warehouse
+            // Sous-requête pour calculer la somme des quantités d'achat en attente pour chaque produit
                 PurchaseDetail::selectRaw('product_id, sum(quantity) as purchase_total_qty')
                     ->join('purchases', 'purchase_details.purchase_id', '=', 'purchases.id')
                     ->where('purchases.statut', '!=', 'received')
@@ -437,12 +437,13 @@ class DashboardController extends Controller
                 '=',
                 'purchase_details.product_id'
             )
-            ->where('manage_stock', true)
-            ->where('products.show_alert', true)
-            // ->whereRaw('qte + ifnull(purchase_details.purchase_total_qty, 0) < products.stock_alert')
-        ->whereRaw('(products.stock_alert IS NOT NULL) AND qte + (ifnull(purchase_details.purchase_total_qty, 0)) <= products.stock_alert')
-            // ->whereRaw('qte <= stock_alert')
-            ->where('product_warehouse.deleted_at', null)
+            ->where('manage_stock', true) // Corriger l'utilisation du nom de la colonne
+            ->where('products.show_alert', true) // Vérification que show_alert est activé pour le produit
+            // Condition pour vérifier que le stock total (stock actuel + en attente) ne dépasse pas le seuil d'alerte
+            ->whereRaw('(products.stock_alert IS NOT NULL) AND qte + IFNULL(purchase_details.purchase_total_qty, 0) <= products.stock_alert')
+            // Condition supplémentaire pour exclure les produits avec une quantité en attente d'achat supérieure à zéro
+            ->whereRaw('IFNULL(purchase_details.purchase_total_qty, 0) = 0')
+            ->whereNull('product_warehouse.deleted_at')
             ->where(function ($query) use ($warehouse_id, $array_warehouses_id) {
                 if ($warehouse_id !== 0) {
                     return $query->where('product_warehouse.warehouse_id', $warehouse_id);
@@ -451,11 +452,12 @@ class DashboardController extends Controller
                 }
             })
             ->groupBy(
-                "products.id",
-                // "product_warehouse.warehouse_id",
-                // "products.stock_alert",
+                'products.id',
+                'product_warehouse.warehouse_id'
             )
-            ->take('30')->get();
+            ->take(30)
+            ->get();
+
 
         // echo $product_warehouse_data;
         // die();
