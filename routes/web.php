@@ -15,7 +15,8 @@ use Modules\Store\Http\Controllers\StoreController;
 | contains the "web" middleware group. Now create something great!
 |
  */
-
+Route::get('etiquettes', [EtiquettesController::class, 'generatePDF']);
+Route::get('etiquettes/print/{ids}', [EtiquettesController::class, 'printSelected']);
 //------------------------------------------------------------------\\
 
 Route::post('/login', [
@@ -127,10 +128,10 @@ Route::group(['middleware' => ['web', 'auth:web', 'Is_Active']], function () {
             }
         })->where('vue', '^(?!api|setup|update|update_database_module|password|module|store|online_store).*$');
 
-        
-        
+
+
     });
-   
+
     Auth::routes([
         'register' => false,
     ]);
