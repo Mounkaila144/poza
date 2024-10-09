@@ -16,9 +16,14 @@ use Modules\Store\Http\Controllers\StoreController;
 | contains the "web" middleware group. Now create something great!
 |
  */
+// routes/web.php, api.php or any other central route files you have
+
+
+//------------------------------------------------------------------\\
 Route::get('etiquettes', [EtiquettesController::class, 'generatePDF']);
 Route::get('etiquettes/print/{ids}', [EtiquettesController::class, 'printSelected']);
-//------------------------------------------------------------------\\
+Route::get('etiquettes/copy_all_codes', [EtiquettesController::class, 'copyAllCodes']);
+
 
 Route::post('/login', [
     'uses' => 'Auth\LoginController@login',
@@ -131,11 +136,11 @@ Route::group(['middleware' => ['web', 'auth:web', 'Is_Active']], function () {
 
 
 
-    });
+});
 
-    Auth::routes([
-        'register' => false,
-    ]);
+Auth::routes([
+    'register' => false,
+]);
 
 
 //------------------------------------------------------------------\\
@@ -157,6 +162,5 @@ Route::group(['middleware' => ['web', 'auth:web', 'Is_Active']], function () {
     ]);
 
 });
-
 
 
