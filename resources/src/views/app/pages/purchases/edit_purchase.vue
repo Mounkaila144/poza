@@ -919,7 +919,7 @@ export default {
             }, 100);
           }
 
-          // this.Get_Products_By_Warehouse(this.purchase.warehouse_id);
+           this.Get_Products_By_Warehouse(this.purchase.warehouse_id);
           this.Calcul_Total();
           this.isLoading = false;
         })
