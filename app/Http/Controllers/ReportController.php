@@ -1527,7 +1527,21 @@ class ReportController extends BaseController
     {
 
         $products_alerts = product_warehouse::join('products', 'product_warehouse.product_id', '=', 'products.id')
-            ->whereRaw('qte <= stock_alert')
+            ->leftJoinSub(
+                PurchaseDetail::selectRaw('product_id, sum(quantity) as purchase_total_qty')
+                    ->join('purchases', 'purchase_details.purchase_id', '=', 'purchases.id')
+                    ->where('purchases.statut', '!=', 'received')
+                    ->whereNull('purchases.deleted_at')
+                    ->groupBy('product_id'),
+                'purchase_details',
+                'product_warehouse.product_id',
+                '=',
+                'purchase_details.product_id'
+            )
+            ->where('products.manage_stock', true)
+            ->where('products.show_alert', true)
+            ->whereRaw('qte + ifnull(purchase_details.purchase_total_qty, 0) <= products.stock_alert')
+            ->whereNull('product_warehouse.deleted_at')
             ->count();
 
         return response()->json($products_alerts);

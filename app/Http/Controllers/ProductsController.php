@@ -1702,11 +1702,24 @@ class ProductsController extends BaseController
         $this->authorizeForUser($request->user('api'), 'Stock_Alerts', Product::class);
 
         // Récupération des données des produits dans les entrepôts avec leurs variantes
+        // Utilise un LEFT JOIN pour inclure les achats en attente dans le calcul
         $product_warehouse_data = product_warehouse::with('warehouse', 'product', 'productVariant')
+            ->select('product_warehouse.*')
             ->join('products', 'product_warehouse.product_id', '=', 'products.id')
+            ->leftJoinSub(
+                PurchaseDetail::selectRaw('product_id, sum(quantity) as purchase_total_qty')
+                    ->join('purchases', 'purchase_details.purchase_id', '=', 'purchases.id')
+                    ->where('purchases.statut', '!=', 'received')
+                    ->whereNull('purchases.deleted_at')
+                    ->groupBy('product_id'),
+                'purchase_details',
+                'product_warehouse.product_id',
+                '=',
+                'purchase_details.product_id'
+            )
             ->where('manage_stock', true)
-            ->whereRaw('qte <= products.stock_alert')
-            ->where('products.show_alert', true) // Vérification que show_alert est activé pour le produit
+            ->whereRaw('qte + ifnull(purchase_details.purchase_total_qty, 0) <= products.stock_alert')
+            ->where('products.show_alert', true)
             ->where(function ($query) use ($request) {
                 return $query->when($request->filled('warehouse'), function ($query) use ($request) {
                     return $query->where('warehouse_id', $request->warehouse);
@@ -1719,36 +1732,27 @@ class ProductsController extends BaseController
 
         if ($product_warehouse_data->isNotEmpty()) {
             foreach ($product_warehouse_data as $product_warehouse) {
-                // Calculer la quantité totale des achats en attente pour chaque produit
-                $purchase_warehouse_total_qty = PurchaseDetail::where('purchase_details.product_id', $product_warehouse->product->id)
-                    ->join('purchases', 'purchase_details.purchase_id', '=', 'purchases.id')
-                    ->where('purchases.statut', '!=', 'received')
-                    ->whereNull('purchases.deleted_at') // Vérifier que l'achat n'est pas supprimé
-                    ->sum('purchase_details.quantity'); // Somme des quantités en attente
+                $item = [];
 
-                // Ne pas ajouter le produit s'il a une quantité en attente supérieure à 0
-                if (($purchase_warehouse_total_qty ?? 0) == 0) {
-                    if ($product_warehouse->qte <= $product_warehouse->product->stock_alert) {
-                        $item = [];
-
-                        if ($product_warehouse->product_variant_id !== null) {
-                            $item['code'] = $product_warehouse->productVariant->code;
-                            $item['name'] = '[' . $product_warehouse->productVariant->name . ']' . $product_warehouse->product->name;
-                        } else {
-                            $item['code'] = $product_warehouse->product->code;
-                            $item['name'] = $product_warehouse->product->name;
-                        }
-
-                        $item['quantity'] = $product_warehouse->qte;
-                        $item['warehouse'] = $product_warehouse->warehouse->name;
-                        $item['stock_alert'] = $product_warehouse->product->stock_alert;
-                        $data[] = $item;
-                    }
+                if ($product_warehouse->product_variant_id !== null) {
+                    $item['code'] = $product_warehouse->productVariant->code;
+                    $item['name'] = '[' . $product_warehouse->productVariant->name . ']' . $product_warehouse->product->name;
+                } else {
+                    $item['code'] = $product_warehouse->product->code;
+                    $item['name'] = $product_warehouse->product->name;
                 }
+
+                $item['quantity'] = $product_warehouse->qte;
+                $item['warehouse'] = $product_warehouse->warehouse->name;
+                $item['stock_alert'] = $product_warehouse->product->stock_alert;
+                $data[] = $item;
             }
         }
 
-        $perPage = $request->limit; // Nombre d'éléments à afficher par page
+        $perPage = $request->limit;
+        if ($perPage == "-1" || $perPage == -1) {
+            $perPage = count($data);
+        }
         $pageStart = \Request::get('page', 1);
         $offSet = ($pageStart * $perPage) - $perPage;
 
@@ -1758,7 +1762,7 @@ class ProductsController extends BaseController
         $products = new LengthAwarePaginator(
             $data_collection,
             count($data),
-            $perPage,
+            max($perPage, 1),
             Paginator::resolveCurrentPage(),
             ['path' => Paginator::resolveCurrentPath()]
         );
